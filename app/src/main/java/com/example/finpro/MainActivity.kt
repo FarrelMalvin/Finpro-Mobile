@@ -188,7 +188,7 @@ class HandSignAnalyzer(
                 val label = labels.getOrNull(best?.first ?: -1) ?: "?"
                 val confidence = best?.second ?: 0f
 
-                if (confidence > 0.5f) {
+                if (confidence > 0.3f) {
                     onResult(
                         "$label (${String.format("%.1f%%", confidence * 100)})",
                         "✅ Tangan: ${landmarks.count { it != 0f } / 3} landmarks"

@@ -32,7 +32,7 @@ class HandLandmarkerHelper(
             val options = HandLandmarker.HandLandmarkerOptions.builder()
                 .setBaseOptions(baseOptions)
                 .setRunningMode(RunningMode.IMAGE)
-                .setNumHands(2) // Detect 2 hands
+                .setNumHands(2)
                 .setMinHandDetectionConfidence(0.5f)
                 .setMinHandPresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
@@ -67,23 +67,22 @@ class HandLandmarkerHelper(
 
 
                     val normalizedDataForOneHand = normalizeLandmarks(rawHandLandmarks) // Output FloatArray(63)
-                    // --- AKHIR PANGGILAN NORMALISASI ---
+
 
                     val baseIdxOffset = when (handednessLabel) {
-                        "Right" -> 0
-                        "Left"  -> 63
+                        "Right" -> 63
+                        "Left"  -> 0
                         else    -> continue
                     }
 
-                    // --- SALIN DATA YANG SUDAH DINORMALISASI ---
-                    // Salin 63 float hasil normalisasi ke bagian array 126 yang benar
+
                     normalizedDataForOneHand.copyInto(
                         destination = flatLandmarks,
                         destinationOffset = baseIdxOffset,
                         startIndex = 0,
                         endIndex = min(normalizedDataForOneHand.size, 63) // Salin maksimal 63
                     )
-                    // --- AKHIR PENYALINAN ---
+
                 }
                 onResult(flatLandmarks) // Kirim hasil 126 yang sudah dinormalisasi & diurutkan
             } else {
