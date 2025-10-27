@@ -104,43 +104,48 @@ class HandLandmarkerHelper(
             return FloatArray(63) { 0f }
         }
 
-        // 1. Dapatkan semua koordinat
-        val coords = landmarks.map { Triple(it.x(), it.y(), it.z()) }
-
-        // 2. Koordinat relatif terhadap pergelangan tangan (index 0)
-        val wrist = coords[0]
-        val relativeCoords = coords.map {
-            Triple(it.first - wrist.first, it.second - wrist.second, it.third - wrist.third)
+        // 1. Dapatkan semua koordinat sebagai array 2D (sama persis dengan Python)
+        val coords = Array(landmarks.size) { i ->
+            floatArrayOf(landmarks[i].x(), landmarks[i].y(), landmarks[i].z())
         }
 
-        // 3. Hitung jarak Euclidean dari pergelangan tangan dan cari max distance
+        // 2. Koordinat relatif terhadap pergelangan tangan (index 0) - SAMA PERSIS dengan Python
+        val wrist = coords[0]
+        val relativeCoords = Array(coords.size) { i ->
+            floatArrayOf(
+                coords[i][0] - wrist[0],
+                coords[i][1] - wrist[1], 
+                coords[i][2] - wrist[2]
+            )
+        }
+
+        // 3. Hitung jarak Euclidean dan cari max distance - SAMA PERSIS dengan Python
         var maxDist = 0f
         for (coord in relativeCoords) {
-            val dist = sqrt(coord.first * coord.first + coord.second * coord.second + coord.third * coord.third)
+            val dist = sqrt(coord[0] * coord[0] + coord[1] * coord[1] + coord[2] * coord[2])
             if (dist > maxDist) {
                 maxDist = dist
             }
         }
 
-        // Handle jika maxDist 0 (misal hanya 1 landmark terdeteksi)
-        if (maxDist < 1e-6) { // Gunakan epsilon untuk perbandingan float
+        // Handle jika maxDist 0 (sama dengan Python)
+        if (maxDist < 1e-6) {
             return FloatArray(63) { 0f }
         }
 
-        // 4. Normalisasi dengan membagi maxDist dan flatten
+        // 4. Normalisasi dengan membagi maxDist dan flatten - SAMA PERSIS dengan Python
         val normalizedFlattened = FloatArray(63)
         var index = 0
         for (coord in relativeCoords) {
-            if (index >= 63) break // Safety break
-            normalizedFlattened[index++] = coord.first / maxDist
-            normalizedFlattened[index++] = coord.second / maxDist
-            normalizedFlattened[index++] = coord.third / maxDist
+            if (index >= 63) break
+            normalizedFlattened[index++] = coord[0] / maxDist
+            normalizedFlattened[index++] = coord[1] / maxDist
+            normalizedFlattened[index++] = coord[2] / maxDist
         }
 
-        // Isi sisa array dengan 0 jika landmark < 21 (seharusnya tidak terjadi)
-        while (index < 63) {
-            normalizedFlattened[index++] = 0f
-        }
+        // Debug logging untuk memverifikasi normalisasi
+        Log.d("NormalizeDebug", "Max distance: $maxDist")
+        Log.d("NormalizeDebug", "First 6 normalized values: ${normalizedFlattened.take(6).joinToString(", ")}")
 
         return normalizedFlattened
     }

@@ -438,6 +438,10 @@ class InterpreterHelper(private val context: Context) {
             val landmarkRatio = validLandmarks.toFloat() / landmarks.size
             
             Log.d("InterpreterHelper", "Landmark validation: $validLandmarks/126 (${String.format("%.1f%%", landmarkRatio * 100)})")
+            
+            // Debug: Log beberapa nilai landmarks untuk verifikasi
+            Log.d("InterpreterDebug", "First 10 landmarks: ${landmarks.take(10).joinToString(", ")}")
+            Log.d("InterpreterDebug", "Last 10 landmarks: ${landmarks.takeLast(10).joinToString(", ")}")
 
             val byteBuffer = ByteBuffer.allocateDirect(4 * 126)
             byteBuffer.order(ByteOrder.nativeOrder())
