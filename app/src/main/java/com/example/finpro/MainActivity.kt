@@ -165,6 +165,8 @@ fun CameraPreviewWithAnalyzer(
     )
 }
 
+// Di HandSignAnalyzer class, update bagian ini:
+
 class HandSignAnalyzer(
     private val context: Context,
     private val onResult: (String, String) -> Unit
@@ -178,9 +180,20 @@ class HandSignAnalyzer(
         ('A'..'Z').map { it.toString() }
     }
 
+    private var isFrontCamera = true // Track camera orientation
+
     private val handLandmarkerHelper: HandLandmarkerHelper = HandLandmarkerHelper(
         context = context,
         onResult = { landmarks ->
+            // Debug: Check if landmarks are valid
+            val nonZeroCount = landmarks.count { it != 0f }
+            Log.d("Analyzer", "Received landmarks, non-zero: $nonZeroCount/126")
+
+            if (nonZeroCount < 20) {
+                onResult("Tidak ada tangan", "⚠️ Landmarks: $nonZeroCount/126")
+                return@HandLandmarkerHelper
+            }
+
             val results = model.classify(landmarks)
 
             if (results.isNotEmpty()) {
@@ -188,14 +201,20 @@ class HandSignAnalyzer(
                 val label = labels.getOrNull(best?.first ?: -1) ?: "?"
                 val confidence = best?.second ?: 0f
 
+                // Log top 3 predictions
+                val top3 = results.take(3).joinToString(", ") { (idx, conf) ->
+                    "${labels.getOrNull(idx) ?: "?"}:${String.format("%.2f", conf)}"
+                }
+                Log.d("Analyzer", "Top 3: $top3")
+
                 if (confidence > 0.5f) {
                     onResult(
                         "$label (${String.format("%.1f%%", confidence * 100)})",
-                        "✅ Tangan: ${landmarks.count { it != 0f } / 3} landmarks"
+                        "✅ Landmarks: ${nonZeroCount/3} | Top3: $top3"
                     )
                 } else {
                     onResult(
-                        "Menunggu input...",
+                        "Tidak yakin: $label",
                         "⚠️ Confidence rendah: ${String.format("%.1f%%", confidence * 100)}"
                     )
                 }
@@ -213,7 +232,8 @@ class HandSignAnalyzer(
         try {
             val bitmap = image.toBitmap()
             if (bitmap != null) {
-                handLandmarkerHelper.detectHand(bitmap)
+                // PENTING: Pass info apakah front camera atau bukan
+                handLandmarkerHelper.detectHand(bitmap, isFrontCamera = isFrontCamera)
             }
         } catch (e: Exception) {
             Log.e("HandSignAnalyzer", "Error analyzing image", e)
@@ -246,11 +266,11 @@ class HandSignAnalyzer(
 
             val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 
-            // Rotate and mirror for front camera
+            // FIX: Rotate saja, JANGAN mirror
+            // Biarkan HandLandmarkerHelper yang handle mirror effect
             val rotationDegrees = imageInfo.rotationDegrees
             val matrix = Matrix()
             matrix.postRotate(rotationDegrees.toFloat())
-            matrix.postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
 
             Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         } catch (e: Exception) {

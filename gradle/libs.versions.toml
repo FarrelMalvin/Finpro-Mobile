@@ -31,6 +31,7 @@ androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
 
 tensorflow-lite-metadata = { group = "org.tensorflow", name = "tensorflow-lite-metadata", version = "0.4.4" }
+tensorflow-lite-gpu = { group = "org.tensorflow", name = "tensorflow-lite-gpu" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

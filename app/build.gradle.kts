@@ -60,7 +60,7 @@ android {
             // Paksa SEMUA library pakai TFLite 2.17.0
             force("org.tensorflow:tensorflow-lite:2.17.0")
             force("org.tensorflow:tensorflow-lite-api:2.17.0") // Paksa API juga
-            //force("org.tensorflow:tensorflow-lite-gpu:2.17.0") // Paksa GPU juga (atau komentari jika tak pakai)
+            force("org.tensorflow:tensorflow-lite-gpu:2.17.0") // Paksa GPU juga (atau komentari jika tak pakai)
         }
     }
 }
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.tensorflow.lite.gpu)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

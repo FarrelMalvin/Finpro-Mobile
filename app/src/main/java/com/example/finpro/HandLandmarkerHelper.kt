@@ -4,13 +4,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.tasks.components.containers.Category
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
-import kotlin.math.min
-import kotlin.math.sqrt
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import kotlin.math.sqrt
 
+private data class LandmarkData(val x: Float, val y: Float, val z: Float)
 
 class HandLandmarkerHelper(
     private val context: Context,
@@ -46,48 +47,31 @@ class HandLandmarkerHelper(
         }
     }
 
-
-    fun detectHand(bitmap: Bitmap) {
+    fun detectHand(bitmap: Bitmap, isFrontCamera: Boolean = true) {
         try {
             val mpImage = BitmapImageBuilder(bitmap).build()
             val result = handLandmarker?.detect(mpImage)
 
-            val flatLandmarks = FloatArray(126) { 0f } // Final array 126
+            Log.d("DEBUG_HELPER", "Hands detected: ${result?.landmarks()?.size ?: 0}")
 
-            if (result != null && result.landmarks().isNotEmpty()) {
-                val detectedHandsLandmarks = result.landmarks()
-                val detectedHandsHandedness = result.handednesses()
+            val keypoints = processLandmarksForModel(
+                result?.landmarks() ?: emptyList(),
+                result?.handedness() ?: emptyList(),
+                isFrontCamera
+            )
 
-                for (i in detectedHandsLandmarks.indices) {
-                    if (i >= detectedHandsHandedness.size) break
+            val nonZeroCount = keypoints.count { it != 0f }
+            Log.d("DEBUG_HELPER", "Non-zero values: $nonZeroCount/126")
 
-                    val rawHandLandmarks = detectedHandsLandmarks[i] // List<NormalizedLandmark> mentah
-                    val handednessInfoList = detectedHandsHandedness[i]
-                    val handednessLabel = handednessInfoList.firstOrNull()?.categoryName()
+            if (nonZeroCount > 0) {
+                val first9 = keypoints.take(9).joinToString(", ") { "%.3f".format(it) }
+                Log.d("DEBUG_HELPER", "First 9 (Left Slot): [$first9]")
 
-
-                    val normalizedDataForOneHand = normalizeLandmarks(rawHandLandmarks) // Output FloatArray(63)
-
-
-                    val baseIdxOffset = when (handednessLabel) {
-                        "Right" -> 63
-                        "Left"  -> 0
-                        else    -> continue
-                    }
-
-
-                    normalizedDataForOneHand.copyInto(
-                        destination = flatLandmarks,
-                        destinationOffset = baseIdxOffset,
-                        startIndex = 0,
-                        endIndex = min(normalizedDataForOneHand.size, 63) // Salin maksimal 63
-                    )
-
-                }
-                onResult(flatLandmarks) // Kirim hasil 126 yang sudah dinormalisasi & diurutkan
-            } else {
-                onResult(flatLandmarks) // Kirim array nol
+                val rightSlot = keypoints.drop(63).take(9).joinToString(", ") { "%.3f".format(it) }
+                Log.d("DEBUG_HELPER", "First 9 (Right Slot): [$rightSlot]")
             }
+
+            onResult(keypoints)
 
         } catch (e: Exception) {
             Log.e("HandLandmarker", "Error detecting hand: ${e.message}", e)
@@ -95,57 +79,95 @@ class HandLandmarkerHelper(
         }
     }
 
-    fun close() {
-        handLandmarker?.close()
-    }
-    private fun normalizeLandmarks(landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>): FloatArray {
-        if (landmarks.isEmpty()) {
-            return FloatArray(63) { 0f }
+    private fun normalizeLandmarks(hand: List<LandmarkData>): FloatArray {
+        val totalFeatures = 63
+        val result = FloatArray(totalFeatures)
+        if (hand.isEmpty()) return result
+
+        val wrist = hand[0]
+        val relativeCoords = mutableListOf<Triple<Float, Float, Float>>()
+
+        for (lm in hand) {
+            relativeCoords.add(Triple(
+                lm.x - wrist.x,
+                lm.y - wrist.y,
+                lm.z - wrist.z
+            ))
         }
 
-        // 1. Dapatkan semua koordinat sebagai array 2D (sama persis dengan Python)
-        val coords = Array(landmarks.size) { i ->
-            floatArrayOf(landmarks[i].x(), landmarks[i].y(), landmarks[i].z())
-        }
-
-        // 2. Koordinat relatif terhadap pergelangan tangan (index 0) - SAMA PERSIS dengan Python
-        val wrist = coords[0]
-        val relativeCoords = Array(coords.size) { i ->
-            floatArrayOf(
-                coords[i][0] - wrist[0],
-                coords[i][1] - wrist[1], 
-                coords[i][2] - wrist[2]
+        var maxDist = 0.0f
+        for (coords in relativeCoords) {
+            val dist = sqrt(
+                coords.first * coords.first +
+                        coords.second * coords.second +
+                        coords.third * coords.third
             )
-        }
-
-        // 3. Hitung jarak Euclidean dan cari max distance - SAMA PERSIS dengan Python
-        var maxDist = 0f
-        for (coord in relativeCoords) {
-            val dist = sqrt(coord[0] * coord[0] + coord[1] * coord[1] + coord[2] * coord[2])
             if (dist > maxDist) {
                 maxDist = dist
             }
         }
 
-        // Handle jika maxDist 0 (sama dengan Python)
-        if (maxDist < 1e-6) {
-            return FloatArray(63) { 0f }
+        if (maxDist < 1e-6f) {
+            return result
         }
 
-        // 4. Normalisasi dengan membagi maxDist dan flatten - SAMA PERSIS dengan Python
-        val normalizedFlattened = FloatArray(63)
-        var index = 0
-        for (coord in relativeCoords) {
-            if (index >= 63) break
-            normalizedFlattened[index++] = coord[0] / maxDist
-            normalizedFlattened[index++] = coord[1] / maxDist
-            normalizedFlattened[index++] = coord[2] / maxDist
+        for (i in relativeCoords.indices) {
+            result[i * 3 + 0] = relativeCoords[i].first / maxDist
+            result[i * 3 + 1] = relativeCoords[i].second / maxDist
+            result[i * 3 + 2] = relativeCoords[i].third / maxDist
         }
+        return result
+    }
 
-        // Debug logging untuk memverifikasi normalisasi
-        Log.d("NormalizeDebug", "Max distance: $maxDist")
-        Log.d("NormalizeDebug", "First 6 normalized values: ${normalizedFlattened.take(6).joinToString(", ")}")
+    /**
+     * FUNGSI YANG DIPERBAIKI: Deteksi handedness SETELAH mirroring
+     */
+    private fun processLandmarksForModel(
+        allHands: List<List<NormalizedLandmark>>,
+        handednessList: List<List<Category>>,
+        isFrontCamera: Boolean
+    ): FloatArray {
+        val totalSize = 126
+        val result = FloatArray(totalSize)
 
-        return normalizedFlattened
+        for (i in allHands.indices) {
+            val rawHand = allHands[i]
+            val originalHandedness = handednessList[i][0].categoryName()
+
+            // STEP 1: Mirror data RAW & Flip Y untuk konsistensi dengan Python
+            val mirroredHand = mutableListOf<LandmarkData>()
+            for (lm in rawHand) {
+                mirroredHand.add(LandmarkData(
+                    x = if (isFrontCamera) 1f - lm.x() else lm.x(),
+                    y = 1f - lm.y(),  // PENTING: Flip Y untuk match dengan Python
+                    z = lm.z()
+                ))
+            }
+
+            // STEP 2: Normalisasi
+            val normalizedFeatures = normalizeLandmarks(mirroredHand)
+
+            // STEP 3: PERBAIKAN - Tentukan handedness SETELAH mirroring
+            // Jika front camera, handedness harus di-flip juga!
+            val actualHandedness = if (isFrontCamera) {
+                // Front camera: flip handedness
+                if (originalHandedness == "Right") "Left" else "Right"
+            } else {
+                // Back camera: pakai original
+                originalHandedness
+            }
+
+            // STEP 4: Slotting berdasarkan handedness yang sudah benar
+            val offset = if (actualHandedness == "Right") 63 else 0
+
+            Log.d("DEBUG_HELPER", "Hand $i: Original=$originalHandedness, After mirror=$actualHandedness, Offset=$offset")
+
+            System.arraycopy(normalizedFeatures, 0, result, offset, normalizedFeatures.size)
+        }
+        return result
+    }
+
+    fun close() {
+        handLandmarker?.close()
     }
 }
